@@ -1,7 +1,7 @@
 [![Build Status](https://travis-ci.org/tseemann/ekidna.svg?branch=master)](https://travis-ci.org/tseemann/ekidna)
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 ![Don't judge me](https://img.shields.io/badge/Language-Perl_5-steelblue.svg)
-[![Echidna cartoon](ekidna.jpg)](https://www.kisspng.com/png-hedgehog-porcupine-echidna-illustration-vector-cut-392690/)
+[![Echidna cartoon](ekidna.png)](https://www.kisspng.com/png-hedgehog-porcupine-echidna-illustration-vector-cut-392690/)
 
 # ekidna
 Assembly based core genome SNP alignments
