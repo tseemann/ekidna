@@ -6,7 +6,10 @@ perl:
     - "5.26"
 
 install:
-    - "export PATH=$PWD:$PATH"
+    - "export PATH=$PWD/bin:$PATH"
 
 script:
     - "echo $PATH"
+    - "ekidna --version"
+    - "ekidna --help"
+    - "! ekidna"
