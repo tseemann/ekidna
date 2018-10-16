@@ -1,0 +1,173 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+use Getopt::Std;
+use File::Basename;
+use IO::Uncompress::AnyUncompress;
+use Cwd qw(realpath);
+use File::Copy;
+
+#......................................................................................
+
+our $VERSION = "0.1.0";
+our $EXE = basename($0);
+
+#......................................................................................
+
+my $minlen = 500;
+my $cpus = 1;
+my $prefix = lc($EXE);
+
+#......................................................................................
+
+sub usage {
+  my($errcode) = @_;
+  $errcode ||= 0;
+  my $ofh = $errcode ? \*STDERR : \*STDOUT;
+  print $ofh 
+    "NAME\n  $EXE $VERSION\n",
+    "SYNOPSIS\n  Assembly based core SNP alignments\n",
+    "USAGE\n  $EXE [options] -o <outdir> [genome.{fna,gff,gbk}.{gz,bz2,zip} ...]\n",
+    "OPTIONS\n",
+    "  -h         Print this help\n",
+    "  -v         Print version and exit\n",
+    "  -q         No output while running, only errors\n",
+    "  -o OUTDIR  Output folder\n",
+    "  -p PREFIX  Prefix for output files [$prefix]\n",
+    "  -j CPUS    Number of CPU threads to use [$cpus]\n",
+    "  -m MINLEN  Minimum alignment size to consider [$minlen]\n",
+    "  -k         Keep intermediate files\n",
+    "END\n";
+  exit($errcode);
+}
+
+sub version {
+  print "$EXE $VERSION\n";
+  exit(0);
+}
+
+#......................................................................................
+
+my %opt;
+getopts('vhqkj:o:m:p:', \%opt) or exit(-1);
+$opt{'v'} and version();
+$opt{'h'} and usage(0);
+$opt{'o'} or err("Please provide an output folder with -o");
+my $dir = $opt{'o'};
+@ARGV or err("Please provide two or more genomes");
+$cpus = $opt{'j'} if $opt{'j'};
+$minlen = $opt{'m'} if $opt{'m'};
+$prefix = $opt{'p'} if $opt{'p'};
+
+#......................................................................................
+
+sub msg {
+  print STDERR "@_\n" unless $opt{q};
+}
+
+sub err {
+  print STDERR "ERROR: @_\n";
+  exit(-1);
+}
+
+#......................................................................................
+
+msg("This is $EXE $VERSION");
+
+system("mkdir -p ".$opt{o})==0 or err("Could not make output folder: $dir");
+my $LOGFILE = realpath("$dir/$prefix.log");
+unlink $LOGFILE if -r $LOGFILE;
+
+# loop over all positional command line arguments
+my $N=0;
+my %fa;
+my $biggest_size=0;
+my $ref_idx=0;
+
+for my $fname (@ARGV) {
+  msg("[*] considering: $fname");
+  -d $fname and err("'$fname' is a directory not a file");
+  -r $fname or err("'$fname' is not readable");
+  $N++;
+  my $fasta = "$dir/$N.fa";
+  system("any2fasta -n -u '$fname' > '$fasta' 2>> '$LOGFILE'")==0 
+    or err("Unable to convert '$fname' into FASTA format.");
+  my $size = -s $fasta;
+  msg("[$N] wrote: $fasta, ~$size bp");
+  if ($size > $biggest_size) {
+    $ref_idx = $N;
+    $biggest_size = $size;
+  }
+}
+msg("Processed $N files.");
+
+chdir($dir);
+my $ref = "$ref_idx.fa";
+msg("Will use reference: $ref ~$biggest_size bp");
+copy($ref, "$prefix.fna");
+
+my @vcf;
+for my $i (1 .. $N) {
+  next if $i == $ref_idx;
+  msg("[$i] aligning contigs");
+  system("minimap2 -c -x asm20 --cs $ref $i.fa > $i.paf 2>> '$LOGFILE'")==0 
+    or err("Could not align $i.fa using minimap2");
+  #system("wc -l $i.paf");
+  msg("[$i] calling variants");
+  system("sort -k6,6 -k8,8n $i.paf | paftools.js call -l $minlen -L $minlen -s $i -f $ref - > $i.vcf 2>> '$LOGFILE'")==0
+    or err("Could not generate $i.vcf using paftools.js");
+  #system("wc -l $i.vcf");
+  system("bcftools view --types snps,mnps $i.vcf | bcftools convert -f $ref -Oz -o $i.vcf.gz");
+  system("bcftools index $i.vcf.gz");
+  unlink "$i.vcf";
+  push @vcf, "$i.vcf.gz";
+  msg("[$i] calling consensus");
+  system("bcftools consensus -f $ref -s $i -o $i.cns $i.vcf.gz");
+}
+
+msg("Building multi-sample VCF: $prefix.vcf");
+system("bcftools merge -0 -Ov -o $prefix.vcf @vcf");
+
+my $full = "$prefix.full.aln";
+msg("Building core alignment: $full");
+unlink $full if -r $full;
+for my $i (1 .. $N) {
+  my $ext = $i == $ref_idx ? 'fa' : 'cns';
+  msg("Appending $i.$ext ...");
+  system("echo '>$i' >> $full");
+#  system("grep -v '>' $i.$ext | tr -d '[ \\n\\r]' >> $full");
+  system("grep -v '>' $i.$ext >> $full");
+}
+
+my $aln = "$prefix.aln";
+msg("Deriving core SNP alignment: $aln");
+system("snp-sites -c -o $aln $full")==0
+  or err("Could not run snp-sites on $full");
+
+msg("Getting base frequencies");
+# chr, length, #A, #C, #G, #T, #2, #3, #4, #CpG, #tv, #ts, #CpG-ts
+my @freq=(0,0,0,0);
+for my $row (qx"seqtk comp $ref") {
+  my @row = split ' ', $row;
+  $freq[$_] += $row[2+$_] for (0..3);
+}
+msg("A,C,G,T = [ @freq ]");
+
+my $tree = "$prefix.nwk";
+msg("Building dendrogram: $tree");
+system("iqtree -fconst ".join(',',@freq).
+       " -m GTR+G4 -bb 1000 -nt AUTO -ntmax $cpus -st DNA -s '$aln' -pre iqtree")==0
+  or err("iqtree crashed, sorry dude.");
+copy("iqtree.treefile", "$prefix.nwk");
+
+unless ($opt{k}) {
+  msg("Removing temporary files; use -k to keep them");
+  unlink $ref;
+  unlink <iqtree.*>, <*.paf>, <*.fa>, <*.cns>, <*.csi>, <*.vcf.gz>
+}
+
+msg("Done.");
+exit(0);
+
+#......................................................................................
+
