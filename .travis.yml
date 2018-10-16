@@ -10,6 +10,6 @@ install:
 
 script:
     - "echo $PATH"
-    - "ekidna --version"
-    - "ekidna --help"
+    - "ekidna -v"
+    - "ekidna -h"
     - "! ekidna"
