@@ -48,9 +48,11 @@ alignment suitable for building phylogenies for population analysis.
 ## Synposis
 
 ```
-% ekidna --version
+% ekidna -t -o outdir *.fna *_R1.fastq.gz
+<snip>
 
-ekidna 0.2.3
+% figtree outdir/ekidna.nwk
+<admire the SNP resolution population structure>
 ```
 
 ## Installation
