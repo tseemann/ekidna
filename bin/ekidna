@@ -86,6 +86,7 @@ sub err {
 #......................................................................................
 
 msg("This is $EXE $VERSION");
+need_exe(qw(any2fasta seqtk minimap2 paftools.js skesa bcftools iqtree snp-sites sort grep));
 
 run_cmd("mkdir -p ".$opt{o});
 $LOGFILE = realpath("$dir/$prefix.log");
@@ -152,15 +153,8 @@ my $aln = "$prefix.aln";
 msg("Deriving core SNP alignment: $aln");
 run_cmd("snp-sites -c -o $aln $full");
 
+msg("Getting nucleotide frequency distribution");
 my @freq = count_acgt($ref);
-msg("Getting base frequencies");
-# chr, length, #A, #C, #G, #T, #2, #3, #4, #CpG, #tv, #ts, #CpG-ts
-my @freq=(0,0,0,0);
-for my $row (qx"seqtk comp $ref") {
-  my @row = split ' ', $row;
-  $freq[$_] += $row[2+$_] for (0..3);
-}
-msg("A,C,G,T = [ @freq ]");
 
 my $tree = "$prefix.nwk";
 msg("Building dendrogram: $tree");
@@ -215,3 +209,17 @@ sub run_cmd {
 }
 
 #......................................................................................
+
+sub need_exe {
+  my(@exe) = @_;
+  for my $exe (@exe) {
+    my($path) = qx"which $exe 2> /dev/null";
+    chomp $path;
+    $path and -x $path ? msg("Using '$exe' - $path")
+                       : err("Could not find '$exe' - please install it.");
+  }
+}
+
+#......................................................................................
+
+
