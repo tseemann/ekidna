@@ -162,14 +162,14 @@ ekidna.aln  ekidna.fna  ekidna.full.aln  ekidna.log  ekidna.nwk  ekidna.vcf
 
 ## Output files
 
-File | Contents
------|---------
-`.log` | log file of all the message output of the pipeline commands
-`.vcf` | multisample VCF file of SNPs found
-`.fna` | reference genome chosen from largest of input genomes
-`.aln` | FASTA alignment of core genome SNPs
-`.full.aln` | FASTA alignment of genomes relative to the `.fna` reference
-`.nwk` | NEWICK tree built from `.full.aln` using `iqtree` GTR+G4 model
+File | Contents | Format
+-----|----------|--------
+`.log` | log file of all the message output of the pipeline commands | ASCII text
+`.vcf` | multisample VCF file of SNPs found | VCF
+`.fna` | reference genome chosen from largest of input genomes | FASTA
+`.aln` | FASTA alignment of core genome SNPs | FASTA (aligned)
+`.full.aln` | FASTA alignment of genomes relative to the `.fna` reference | FASTA (aligned)
+`.nwk` | Tree built from `.full.aln` using `iqtree` GTR+G4 model | Newick
 
 ## Dependencies
 
