@@ -50,7 +50,7 @@ alignment suitable for building phylogenies for population analysis.
 ```
 % ekidna --version
 
-ekidna 0.1.0
+ekidna 0.2.3
 ```
 
 ## Installation
@@ -77,15 +77,109 @@ git clone https://github.com/tseemann/ekidna.git
 $HOME/ekidna/bin/ekidna --help
 ```
 
+## Interface
+
+```
+USAGE
+  ekidna [options] -o <outdir> <SAMPLE1 SAMPLE2 SAMPLE3 ...>
+SAMPLES
+  Contigs    contigs.{fna,gff,gbk}[.gz] (assembled genomes)
+  Reads      R1.{fq,fastq}[.gz] (only want R1)
+OPTIONS
+  -h         Print this help
+  -v         Print version and exit
+  -q         No output while running, only errors
+  -k         Keep intermediate files
+  -o OUTDIR  Output folder [mandatory]
+  -p PREFIX  Prefix for output files [ekidna]
+  -j CPUS    Number of CPU threads to use [1]
+  -m MINLEN  Minimum alignment size to consider [500]
+  -a ASMCMD  Assember command [skesa ...]
+  -t         Also build tree
+```
+
+## Input files
+
+### Assembled genomes or contigs
+* FASTA, Genbank, EMBL, GFF ; optionally compressed with gzip, bzip2, zip
+
+### Read sequences
+* FASTQ ; optionally compressed with gzip
+* These will be assembled rapidly and roughly into contigs
+* Only one FASTQ file is accepted ; suggest `_R1` if you have paired reads
+
+## Usage
+
+```
+% cd test
+
+% ls
+NC_018594.fna.gz  NC_021004.fna.gz  NC_021006.fna.gz  NC_021028.fna.gz
+NC_021003.fna.gz  NC_021005.fna.gz  NC_021026.fna.gz
+
+% ekidna -o outdir *.fna.gz
+<snip>
+
+% ls outdir
+ekidna.aln  ekidna.fna  ekidna.full.aln  ekidna.log  ekidna.vcf
+
+% bcftools stats outdir/ekidna.vcf | grep ^SN
+SN      0       number of samples:      6
+SN      0       number of records:      34157
+SN      0       number of no-ALTs:      0
+SN      0       number of SNPs: 34157
+SN      0       number of MNPs: 0
+SN      0       number of indels:       0
+SN      0       number of others:       0
+SN      0       number of multiallelic sites:   275
+SN      0       number of multiallelic SNP sites:       275
+
+% ekidna -t -o outdir_with_tree *.fna.gz
+<snip>
+
+% ls outdir_with_tree
+ekidna.aln  ekidna.fna  ekidna.full.aln  ekidna.log  ekidna.nwk  ekidna.vcf
+
+% nw_indent outdir_with_tree/ekidna.nwk
+(
+  1:0.0053451412,
+  (
+    2:0.0000468773,
+    3:0.0000132048
+  )100:0.0047928014,
+  (
+    (
+      (
+        4:0.0000018784,
+        6:0.0000041298
+      )100:0.0000329960,
+      7:0.0000872871
+    )100:0.0018254115,
+    5:0.0014513321
+  )100:0.0036613244
+);
+```
+
+## Output files
+
+File | Contents
+-----|---------
+`.log` | log file of all the message output of the pipeline commands
+`.vcf` | multisample VCF file of SNPs found
+`.fna` | reference genome chosen from largest of input genomes
+`.aln` | FASTA alignment of core genome SNPs
+`.full.aln` | FASTA alignment of genomes relative to the `.fna` reference
+`.nwk` | NEWICK tree built from `.full.aln` using `iqtree` GTR+G4 model
+
 ## Dependencies
 
-* perl >= 5.26
-* minimap2 + paftools.js >= 2.0
-* samtools >= 1.9
-* bcftools >= 1.9
-* any2fasta >= 0.2
-* seqtk >= 1.2
-* snp-sites >= 2.0
+* `perl` >= 5.18
+* `minimap2` + `paftools.js` >= 2.0
+* `samtools` >= 1.9
+* `bcftools` >= 1.9
+* `any2fasta` >= 0.4
+* `seqtk` >= 1.2
+* `snp-sites` >= 2.0
 
 ## Etymology
 
@@ -107,8 +201,6 @@ Ekidna is free software, released under the
 Please submit suggestions and bug reports to the
 [Issue Tracker](https://github.com/tseemann/ekidna/issues)
 
-
 ## Author
 
 [Torsten Seemann](https://twitter.com/torstenseemann)
-
