@@ -8,7 +8,7 @@ use File::Spec;
 
 #......................................................................................
 
-our $VERSION = "0.2.2";
+our $VERSION = "0.2.3";
 our $EXE = basename($0);
 our $URL = "https://github.com/tseemann/ekidna";
 
@@ -43,6 +43,7 @@ sub usage {
     "  -j CPUS    Number of CPU threads to use [$cpus]\n",
     "  -m MINLEN  Minimum alignment size to consider [$minlen]\n",
     "  -a ASMCMD  Assember command [$asmcmd]\n",
+    "  -t         Also build tree\n",
     "HOME\n  $URL\n",
     "END\n";
   exit($errcode);
@@ -56,7 +57,7 @@ sub version {
 #......................................................................................
 
 my %opt;
-getopts('vhqkj:o:m:p:', \%opt) or exit(-1);
+getopts('vhtqkj:o:m:p:', \%opt) or exit(-1);
 $opt{'v'} and version();
 $opt{'h'} and usage(0);
 $opt{'o'} or err("Please provide an output folder with -o");
@@ -85,12 +86,13 @@ sub err {
 
 #......................................................................................
 
-msg("This is $EXE $VERSION");
-need_exe(qw(any2fasta seqtk minimap2 paftools.js skesa bcftools iqtree snp-sites sort grep));
-
+# set up log file
 run_cmd("mkdir -p ".$opt{o});
 $LOGFILE = realpath("$dir/$prefix.log");
 run_cmd("rm -f -v '$LOGFILE'") if -r $LOGFILE;
+
+msg("This is $EXE $VERSION");
+need_exe(qw(any2fasta seqtk minimap2 paftools.js skesa bcftools iqtree snp-sites sort grep));
 
 # loop over all positional command line arguments
 my $N=0;
@@ -153,15 +155,17 @@ my $aln = "$prefix.aln";
 msg("Deriving core SNP alignment: $aln");
 run_cmd("snp-sites -c -o $aln $full");
 
-msg("Getting nucleotide frequency distribution");
-my @freq = count_acgt($ref);
+if ($opt{'t'}) {
+  msg("Getting nucleotide frequency distribution");
+  my @freq = count_acgt($ref);
 
-my $tree = "$prefix.nwk";
-msg("Building dendrogram: $tree");
-my $bootstrap = $N < 4 ? '' : '-bb 1000';
-run_cmd("iqtree -fconst ".join(',',@freq).
-       " -m GTR+G4 $bootstrap -nt AUTO -ntmax $cpus -st DNA -s '$aln' -pre iqtree -redo");
-run_cmd("cp -f -v iqtree.treefile $prefix.nwk");
+  my $tree = "$prefix.nwk";
+  msg("Building dendrogram: $tree");
+  my $bootstrap = $N < 4 ? '' : '-bb 1000';
+  run_cmd("iqtree -fconst ".join(',',@freq).
+         " -m GTR+G4 $bootstrap -nt AUTO -ntmax $cpus -st DNA -s '$aln' -pre iqtree -redo");
+  run_cmd("cp -f -v iqtree.treefile $prefix.nwk");
+}
 
 unless ($opt{k}) {
   msg("Removing temporary files; use -k to keep them");
@@ -169,8 +173,25 @@ unless ($opt{k}) {
   unlink <iqtree.*>, <*.paf>, <*.fa>, <*.cns>, <*.csi>, <*.vcf.gz>
 }
 
+msg( enlightenment($$ + $N + $cpus) );
 msg("Done.");
 exit(0);
+
+#......................................................................................
+
+sub enlightenment {
+  my($randy) = @_;
+  my @motd = (
+    "Did you know? Ekidna is named after the Australian monotreme the echidna.",
+    "These may not be the SNPs you are looking for.",
+    "Found a bug? Post it at $URL/issues",
+    "Have a suggestion? Tell me at $URL/issues",
+    "The Ekidna manual is at $URL/blob/master/README.md",
+    "If you only have FASTQ files, you should probably consider Snippy instead.",
+    "This motivational quote left intentionally blank.",
+  );
+  return $motd[ $randy % @motd ];
+}
 
 #......................................................................................
 
