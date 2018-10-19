@@ -4,16 +4,19 @@ use warnings;
 use Getopt::Std;
 use File::Basename;
 use Cwd qw(realpath);
+use File::Spec;
 
 #......................................................................................
 
-our $VERSION = "0.2.0";
+our $VERSION = "0.2.2";
 our $EXE = basename($0);
+our $URL = "https://github.com/tseemann/ekidna";
 
 #......................................................................................
 
 my $minlen = 500;
 my $cpus = 1;
+my $asmcmd = "skesa --fastq {R1} --kmer 31 --cores {CPUS} --steps 1 --vector_percent 1 --contigs_out {CTGS}";
 my $prefix = lc($EXE);
 my $LOGFILE; # will be set later once <outdir> created
 
@@ -26,16 +29,21 @@ sub usage {
   print $ofh 
     "NAME\n  $EXE $VERSION\n",
     "SYNOPSIS\n  Assembly based core SNP alignments\n",
-    "USAGE\n  $EXE [options] -o <outdir> <genome.{fna,gff,gbk}.{gz,bz2,zip} ...>\n",
+    "USAGE\n  $EXE [options] -o <outdir> <SAMPLE1 SAMPLE2 SAMPLE3 ...>\n",
+    "SAMPLES\n",
+    "  Contigs    contigs.{fna,gff,gbk}[.gz] (assembled genomes)\n",
+    "  Reads      R1.{fq,fastq}[.gz] (only want R1)\n",
     "OPTIONS\n",
     "  -h         Print this help\n",
     "  -v         Print version and exit\n",
     "  -q         No output while running, only errors\n",
-    "  -o OUTDIR  Output folder\n",
+    "  -k         Keep intermediate files\n",
+    "  -o OUTDIR  Output folder [mandatory]\n",
     "  -p PREFIX  Prefix for output files [$prefix]\n",
     "  -j CPUS    Number of CPU threads to use [$cpus]\n",
     "  -m MINLEN  Minimum alignment size to consider [$minlen]\n",
-    "  -k         Keep intermediate files\n",
+    "  -a ASMCMD  Assember command [$asmcmd]\n",
+    "HOME\n  $URL\n",
     "END\n";
   exit($errcode);
 }
@@ -90,12 +98,18 @@ my $biggest_size=0;
 my $ref_idx=0;
 
 for my $fname (@ARGV) {
-  msg("[*] considering: $fname");
-  -d $fname and err("'$fname' is a directory not a file");
+  my(undef, $path, $file) = File::Spec->splitpath($fname);
+  msg("processing: $fname ($file)");
+  -d $fname and err("'$fname' is a directory, not a file");
   -r $fname or err("'$fname' is not readable");
   $N++;
   my $fasta = "$dir/$N.fa";
-  run_cmd("any2fasta -n -u '$fname' > '$fasta'");
+  if ($file =~ m/f(ast)?q/) {
+    denovo_assemble($fname, $fasta) unless -r $fasta;
+  } 
+  else {
+    run_cmd("any2fasta -n -u '$fname' > '$fasta'");
+  }
   my $size = -s $fasta;
   msg("[$N] wrote: $fasta, ~$size bp");
   if ($size > $biggest_size) {
@@ -113,7 +127,7 @@ run_cmd("cp -f -v '$ref' '$prefix.fna'");
 my @vcf;
 for my $i (1 .. $N) {
   next if $i == $ref_idx;
-  run_cmd("minimap2 -c -x asm20 --cs $ref $i.fa > $i.paf");
+  run_cmd("minimap2 -t $opt{j} -c -x asm20 --cs $ref $i.fa > $i.paf");
   run_cmd("sort -k6,6 -k8,8n $i.paf | paftools.js call -l $minlen -L $minlen -s $i -f $ref - > $i.vcf");
   run_cmd("bcftools view --types snps,mnps $i.vcf | bcftools convert -f $ref -Oz -o $i.vcf.gz");
   run_cmd("bcftools index $i.vcf.gz");
@@ -138,6 +152,7 @@ my $aln = "$prefix.aln";
 msg("Deriving core SNP alignment: $aln");
 run_cmd("snp-sites -c -o $aln $full");
 
+my @freq = count_acgt($ref);
 msg("Getting base frequencies");
 # chr, length, #A, #C, #G, #T, #2, #3, #4, #CpG, #tv, #ts, #CpG-ts
 my @freq=(0,0,0,0);
@@ -149,8 +164,9 @@ msg("A,C,G,T = [ @freq ]");
 
 my $tree = "$prefix.nwk";
 msg("Building dendrogram: $tree");
+my $bootstrap = $N < 4 ? '' : '-bb 1000';
 run_cmd("iqtree -fconst ".join(',',@freq).
-       " -m GTR+G4 -bb 1000 -nt AUTO -ntmax $cpus -st DNA -s '$aln' -pre iqtree");
+       " -m GTR+G4 $bootstrap -nt AUTO -ntmax $cpus -st DNA -s '$aln' -pre iqtree -redo");
 run_cmd("cp -f -v iqtree.treefile $prefix.nwk");
 
 unless ($opt{k}) {
@@ -161,6 +177,31 @@ unless ($opt{k}) {
 
 msg("Done.");
 exit(0);
+
+#......................................................................................
+
+sub count_acgt {
+  my($fasta) = @_;
+  # chr, length, #A, #C, #G, #T, #2, #3, #4, #CpG, #tv, #ts, #CpG-ts
+  my @freq=(0,0,0,0);
+  for my $row (qx"seqtk comp $ref") {
+    my @row = split ' ', $row;
+    $freq[$_] += $row[2+$_] for (0..3);
+  }
+  return @freq;
+}
+
+#......................................................................................
+
+sub denovo_assemble {
+  my($reads, $ctgs) = @_;
+  msg("De novo assembling $ctgs");
+  my $cmd = $asmcmd;
+  $cmd =~ s/{R1}/$reads/;
+  $cmd =~ s/{CTGS}/$ctgs/;
+  $cmd =~ s/{CPUS}/$opt{j}/;
+  run_cmd($cmd);
+}
 
 #......................................................................................
 
