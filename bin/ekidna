@@ -8,7 +8,7 @@ use File::Spec;
 
 #......................................................................................
 
-our $VERSION = "0.3.1";
+our $VERSION = "0.3.2";
 our $EXE = basename($0);
 our $URL = "https://github.com/tseemann/ekidna";
 
@@ -30,7 +30,9 @@ sub usage {
   print $ofh 
     "NAME\n  $EXE $VERSION\n",
     "SYNOPSIS\n  Assembly based core SNP alignments\n",
-    "USAGE\n  $EXE [options] -o <outdir> <SAMPLE1 SAMPLE2 SAMPLE3 ...>\n",
+    "USAGE\n",
+    "  $EXE [options] -o <outdir> <SAMPLE1 SAMPLE2 SAMPLE3 ...>\n",
+    "  $EXE [options] -o <outdir> -i <SAMPLE_fofn>>\n",
     "SAMPLES\n",
     "  Contigs    contigs.{fna,gff,gbk}[.gz] (assembled genomes)\n",
     "  Reads      R1.{fq,fastq}[.gz] (only want R1)\n",
@@ -40,6 +42,7 @@ sub usage {
     "  -c         Check dependencies and exit\n",
     "  -q         No output while running, only errors\n",
     "  -k         Keep intermediate files\n",
+    "  -i FOFN    File of input sample file names\n",
     "  -o OUTDIR  Output folder [mandatory]\n",
     "  -p PREFIX  Prefix for output files [$prefix]\n",
     "  -j CPUS    Number of CPU threads to use [$cpus]\n",
@@ -60,13 +63,13 @@ sub version {
 #......................................................................................
 
 my %opt;
-getopts('vhctqkj:o:m:p:', \%opt) or exit(-1);
+getopts('vhctqkj:o:m:p:i:', \%opt) or exit(-1);
 $opt{'v'} and version();
 $opt{'h'} and usage(0);
 $opt{'c'} and exit( need_exe(@DEPS) );
 $opt{'o'} or err("Please provide an output folder with -o");
 my $dir = $opt{'o'};
-@ARGV or err("Please provide two or more genomes");
+$opt{i} || @ARGV or err("Please provide 2+ genomes, via -i or on command line");
 $cpus = $opt{'j'} if $opt{'j'};
 $minlen = $opt{'m'} if $opt{'m'};
 $prefix = $opt{'p'} if $opt{'p'};
@@ -104,7 +107,10 @@ my %fa;
 my $biggest_size=0;
 my $ref_idx=0;
 
-for my $fname (@ARGV) {
+# get files from cmdline or from -i FOFN
+my @INFILES = $opt{i} ? read_lines($opt{i}) : @ARGV;
+
+for my $fname (@INFILES) {
   my(undef, $path, $file) = File::Spec->splitpath($fname);
   msg("processing: $fname ($file)");
   -d $fname and err("'$fname' is a directory, not a file");
@@ -214,6 +220,18 @@ sub count_acgt {
     $freq[$_] += $row[2+$_] for (0..3);
   }
   return @freq;
+}
+
+#......................................................................................
+
+sub read_lines {
+  my($fname) = @_;
+  open my $IN, '<', $fname or err("Can't read file '$fname'");
+  my @lines = <$IN>;
+  chomp @lines;
+  close $IN;
+  msg("Read", scalar(@lines), "from '$fname'");
+  return @lines;
 }
 
 #......................................................................................
