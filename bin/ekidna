@@ -8,7 +8,7 @@ use File::Spec;
 
 #......................................................................................
 
-our $VERSION = "0.2.3";
+our $VERSION = "0.3.0";
 our $EXE = basename($0);
 our $URL = "https://github.com/tseemann/ekidna";
 
@@ -92,7 +92,7 @@ $LOGFILE = realpath("$dir/$prefix.log");
 run_cmd("rm -f -v '$LOGFILE'") if -r $LOGFILE;
 
 msg("This is $EXE $VERSION");
-need_exe(qw(any2fasta seqtk minimap2 paftools.js skesa bcftools iqtree snp-sites sort grep));
+need_exe(qw(any2fasta seqtk minimap2 paftools.js skesa bcftools iqtree snp-sites bedtools));
 
 # loop over all positional command line arguments
 my $N=0;
@@ -126,16 +126,22 @@ chdir($dir);
 my $ref = "$ref_idx.fa";
 msg("Will use reference: $ref ~$biggest_size bp");
 run_cmd("cp -f -v '$ref' '$prefix.fna'");
+# https://github.com/samtools/samtools/issues/970
+run_cmd("samtools faidx '$ref'");
+run_cmd("cut -f 1,2 '$ref.fai' > $prefix.genome");
 
 my @vcf;
 for my $i (1 .. $N) {
   next if $i == $ref_idx;
-  run_cmd("minimap2 -t $opt{j} -c -x asm20 --cs $ref $i.fa > $i.paf");
-  run_cmd("sort -k6,6 -k8,8n $i.paf | paftools.js call -l $minlen -L $minlen -s $i -f $ref - > $i.vcf");
+  run_cmd("minimap2 -t $opt{j} -c -x asm20 --cs $ref $i.fa | sort -k6,6 -k8,8n > $i.paf");
+  run_cmd("paftools.js call -l $minlen -L $minlen -s $i -f $ref $i.paf > $i.vcf");
   run_cmd("bcftools view --types snps,mnps $i.vcf | bcftools convert -f $ref -Oz -o $i.vcf.gz");
   run_cmd("bcftools index $i.vcf.gz");
   push @vcf, "$i.vcf.gz";
   run_cmd("bcftools consensus -f $ref -s $i -o $i.cns $i.vcf.gz");
+  run_cmd("cut -f 6,8,9 $i.paf > $i.cov.bed");
+  run_cmd("bedtools complement -i $i.cov.bed -g $prefix.genome > $i.uncov.bed");
+  run_cmd("bedtools maskfasta -fi $i.cns -fo $i.cns.masked -mc '-' -bed $i.uncov.bed");
 }
 
 run_cmd("bcftools merge -0 -Ov -o $prefix.vcf @vcf");
@@ -144,7 +150,7 @@ my $full = "$prefix.full.aln";
 msg("Building core alignment: $full");
 unlink $full if -r $full;
 for my $i (1 .. $N) {
-  my $ext = $i == $ref_idx ? 'fa' : 'cns';
+  my $ext = $i == $ref_idx ? 'fa' : 'cns.masked';
   msg("Appending $i.$ext ...");
   run_cmd("echo '>$i' >> $full");
   run_cmd("grep -v '>' $i.$ext >> $full");
@@ -169,7 +175,8 @@ if ($opt{'t'}) {
 unless ($opt{k}) {
   msg("Removing temporary files; use -k to keep them");
   unlink $ref;
-  unlink <iqtree.*>, <*.paf>, <*.fa>, <*.cns>, <*.csi>, <*.vcf.gz>, <*.vcf>
+  unlink <iqtree.*>, <*.paf>, <*.fa>, <*.cns>, <*.csi>, 
+         <*.vcf.gz>, <*.vcf>, <*.fai>, <*.bed>, <*.masked>
 }
 
 msg( enlightenment($$ + $N + $cpus) );

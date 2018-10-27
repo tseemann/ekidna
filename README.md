@@ -176,12 +176,13 @@ File | Contents | Format
 ## Dependencies
 
 * `perl` >= 5.18
-* `minimap2` + `paftools.js` >= 2.0
+* `minimap2` + `paftools.js` >= 2.13
 * `samtools` >= 1.9
 * `bcftools` >= 1.9
 * `any2fasta` >= 0.4
 * `seqtk` >= 1.2
 * `snp-sites` >= 2.0
+* `bedtools` >= 2.0
 
 ## Etymology
 
