@@ -8,12 +8,13 @@ use File::Spec;
 
 #......................................................................................
 
-our $VERSION = "0.3.0";
+our $VERSION = "0.3.1";
 our $EXE = basename($0);
 our $URL = "https://github.com/tseemann/ekidna";
 
 #......................................................................................
 
+my @DEPS = qw(any2fasta seqtk minimap2 paftools skesa bcftools iqtree snp-sites bedtools);
 my $minlen = 500;
 my $cpus = 1;
 my $asmcmd = "skesa --fastq {R1} --kmer 31 --cores {CPUS} --steps 1 --vector_percent 1 --contigs_out {CTGS}";
@@ -36,6 +37,7 @@ sub usage {
     "OPTIONS\n",
     "  -h         Print this help\n",
     "  -v         Print version and exit\n",
+    "  -c         Check dependencies and exit\n",
     "  -q         No output while running, only errors\n",
     "  -k         Keep intermediate files\n",
     "  -o OUTDIR  Output folder [mandatory]\n",
@@ -44,6 +46,7 @@ sub usage {
     "  -m MINLEN  Minimum alignment size to consider [$minlen]\n",
     "  -a ASMCMD  Assember command [$asmcmd]\n",
     "  -t         Also build tree\n",
+    "DEPENDENCIES\n  @DEPS\n",
     "HOME\n  $URL\n",
     "END\n";
   exit($errcode);
@@ -57,9 +60,10 @@ sub version {
 #......................................................................................
 
 my %opt;
-getopts('vhtqkj:o:m:p:', \%opt) or exit(-1);
+getopts('vhctqkj:o:m:p:', \%opt) or exit(-1);
 $opt{'v'} and version();
 $opt{'h'} and usage(0);
+$opt{'c'} and exit( need_exe(@DEPS) );
 $opt{'o'} or err("Please provide an output folder with -o");
 my $dir = $opt{'o'};
 @ARGV or err("Please provide two or more genomes");
@@ -92,7 +96,7 @@ $LOGFILE = realpath("$dir/$prefix.log");
 run_cmd("rm -f -v '$LOGFILE'") if -r $LOGFILE;
 
 msg("This is $EXE $VERSION");
-need_exe(qw(any2fasta seqtk minimap2 paftools.js skesa bcftools iqtree snp-sites bedtools));
+need_exe(@DEPS);
 
 # loop over all positional command line arguments
 my $N=0;
@@ -134,7 +138,7 @@ my @vcf;
 for my $i (1 .. $N) {
   next if $i == $ref_idx;
   run_cmd("minimap2 -t $opt{j} -c -x asm20 --cs $ref $i.fa | sort -k6,6 -k8,8n > $i.paf");
-  run_cmd("paftools.js call -l $minlen -L $minlen -s $i -f $ref $i.paf > $i.vcf");
+  run_cmd("paftools call -l $minlen -L $minlen -s $i -f $ref $i.paf > $i.vcf");
   run_cmd("bcftools view --types snps,mnps $i.vcf | bcftools convert -f $ref -Oz -o $i.vcf.gz");
   run_cmd("bcftools index $i.vcf.gz");
   push @vcf, "$i.vcf.gz";
@@ -241,10 +245,11 @@ sub need_exe {
   my(@exe) = @_;
   for my $exe (@exe) {
     my($path) = qx"which $exe 2> /dev/null";
+    $path or err("Could not find '$exe' - please install it.");
     chomp $path;
-    $path and -x $path ? msg("Using '$exe' - $path")
-                       : err("Could not find '$exe' - please install it.");
+    msg("Using '$exe' - $path")
   }
+  return 0;
 }
 
 #......................................................................................
