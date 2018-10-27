@@ -134,7 +134,6 @@ for my $i (1 .. $N) {
   run_cmd("sort -k6,6 -k8,8n $i.paf | paftools.js call -l $minlen -L $minlen -s $i -f $ref - > $i.vcf");
   run_cmd("bcftools view --types snps,mnps $i.vcf | bcftools convert -f $ref -Oz -o $i.vcf.gz");
   run_cmd("bcftools index $i.vcf.gz");
-  run_cmd("rm -f -v $i.vcf");
   push @vcf, "$i.vcf.gz";
   run_cmd("bcftools consensus -f $ref -s $i -o $i.cns $i.vcf.gz");
 }
@@ -170,7 +169,7 @@ if ($opt{'t'}) {
 unless ($opt{k}) {
   msg("Removing temporary files; use -k to keep them");
   unlink $ref;
-  unlink <iqtree.*>, <*.paf>, <*.fa>, <*.cns>, <*.csi>, <*.vcf.gz>
+  unlink <iqtree.*>, <*.paf>, <*.fa>, <*.cns>, <*.csi>, <*.vcf.gz>, <*.vcf>
 }
 
 msg( enlightenment($$ + $N + $cpus) );
