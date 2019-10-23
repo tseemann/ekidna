@@ -3,6 +3,8 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 ![Don't judge me](https://img.shields.io/badge/Language-Perl_5-steelblue.svg)
 
+:warning: This software is still in early development
+
 # ekidna
 Assembly based core genome SNP alignments
 
@@ -60,13 +62,13 @@ alignment suitable for building phylogenies for population analysis.
 ### Conda
 Install [Conda](https://conda.io/docs/) or [Miniconda](https://conda.io/miniconda.html):
 ```
-conda install -c bioconda ekidna  # COMING DEC 2018
+conda install -c bioconda ekidna  # COMING ONE DAY
 ```
 
 ### Homebrew
 Install [HomeBrew](http://brew.sh/) (Mac OS X) or [LinuxBrew](http://linuxbrew.sh/) (Linux).
 ```
-brew install brewsci/bio/ekidna  # COMING DEC 2018
+brew install brewsci/bio/ekidna  # COMING ONE DAY
 ```
 
 ### Source
